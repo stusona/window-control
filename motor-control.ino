@@ -1,6 +1,6 @@
 /*
 Motor control for window in Aurai system
-By Stuart Sonatina and co
+By Stuart Sonatina and Jacquie Nguyen
 IDD - 209U, UC Berkeley, November 2017
 Details:
   Initialize window position by closing it until the reed switch is triggered
