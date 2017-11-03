@@ -20,8 +20,33 @@ Details:
 // Potentiometer Definitions
 //#define DEG_PER_CNT NEED TO DEFINE
 
+// Stepper Definitions
+#define MOTOR_STEPS 200  //Steps per full motor revolution
+#define RPM 120          //Motor speed
+#define MICROSTEPS 1     //Low resolution (full step)
+#define OPEN_POS 200     //Absolute step position of open window
+#define CLOSED_POS 0     //Absolute step position of closed window
+
+// Reed switch Definitions
+#define CLOSED_FLAG False
+
 // Stop motor after a period of time (in case of mishaps)
 #define CUTOFF_TIME 10000 // (ms)
+
+#include <Arduino.h>
+#include "DRV8825.h"
+
+// Using a 200-step motor
+DRV8825 stepper (200, 8, 9, ms1, ms2, ms3);
+
+void setup() {
+  //Set target motor RPM to 1RPM and microstepping at resolution 1 (full)
+  stepper.begin(RPM, MICROSTEPS);
+}
+
+void loop() {
+  stepper.move (); //
+}
 
 
 /*****************************************************************************/
@@ -34,15 +59,10 @@ Details:
 #define CONTROLLER_PERIOD   10    // ms
 #define POSITION_HOLD_TIME  1000  // ms
 
-// PID Constants: Lifting
-#define KP_LIFT   300
-#define KI_LIFT   1800
-#define KD_LIFT   20
-
-// PID Constants: Stopping
-#define KP_STOP   230
-#define KI_STOP   2100
-#define KD_STOP   23
+// PID Constants
+#define KP   300
+#define KI   1800
+#define KD   20
 
 // Variable Declarations
 
@@ -64,6 +84,7 @@ unsigned long serialWriteRunTime = 0;
 unsigned long controllerRunTime = 0;
 
 // Define state struct type
+// add flag for manual change
 typedef struct S_t
 {
   float theta[2];     // radians
