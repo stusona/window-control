@@ -9,27 +9,20 @@ Details:
   Uses DRV8825 pololu stepper driver
  */
 #include <Arduino.h>
-#include "BasicStepperDriver.h"
+#include "DRV8825.h"
 
+// Pin Definitions
+#define DIR_PIN     8
+#define STEP_PIN    9
+#define POT_PIN     A0 // Sense voltage on Potentiometer wiper
+#define SWITCH_PIN  A1 // Sense reed switch (LOW is open and HIGH is closed)
+#define ENABLE_PIN
 // Motor steps per revolution. Most steppers are 200 steps or 1.8 degrees/step
 #define MOTOR_STEPS 200
 #define RPM 60
+#define MICROSTEPS 1  // 1=full step, 2=half step etc.
 
-// Since microstepping is set externally, make sure this matches the selected mode
-// If it doesn't, the motor will move at a different RPM than chosen
-// 1=full step, 2=half step etc.
-#define MICROSTEPS 1
-
-// All the wires needed for full functionality
-#define DIR_PIN   8
-#define STEP_PIN  9
-#define POT_PIN   A0
-
-// 2-wire basic config, microstepping is hardwired on the driver
-BasicStepperDriver stepper(MOTOR_STEPS, DIR, STEP);
-
-//Uncomment line to use enable/disable functionality
-//BasicStepperDriver stepper(MOTOR_STEPS, DIR, STEP, ENABLE);
+DRV8825 stepper(MOTOR_STEPS, DIR_PIN, STEP_PIN);
 
 void setup() {
     stepper.begin(RPM, MICROSTEPS);
@@ -37,21 +30,8 @@ void setup() {
 
 void loop() {
 
-    // energize coils - the motor will hold position
-    // stepper.enable();
+    // Move motor using steps since each step is 1.8 degrees
+    stepper.move(200*MICROSTEPS);
 
-    /*
-     * Moving motor one full revolution using the degree notation
-     */
-    stepper.rotate(360);
-
-    /*
-     * Moving motor to original position using steps
-     */
-    stepper.move(-200*MICROSTEPS);
-
-    // pause and allow the motor to be moved by hand
-    // stepper.disable();
-
-    delay(5000);
+    delay(3000);
 }
