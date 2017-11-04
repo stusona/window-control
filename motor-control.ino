@@ -8,6 +8,10 @@ Details:
 
   Uses DRV8825 pololu stepper driver
 */
+
+#include <Arduino.h>
+#include "BasicStepperDriver.h"
+
 // Serial write, or serial plot?
 #define serWrite 1
 
@@ -20,7 +24,7 @@ Details:
 // Potentiometer Definitions
 //#define DEG_PER_CNT NEED TO DEFINE
 
-// Stepper Definitions
+// Stepper Definitions - there are more defined here than needed for demo
 #define MOTOR_STEPS 200  //Steps per full motor revolution
 #define RPM 120          //Motor speed
 #define MICROSTEPS 1     //Low resolution (full step)
@@ -33,19 +37,38 @@ Details:
 // Stop motor after a period of time (in case of mishaps)
 #define CUTOFF_TIME 10000 // (ms)
 
-#include <Arduino.h>
-#include "DRV8825.h"
-
 // Using a 200-step motor
-DRV8825 stepper (200, 8, 9, ms1, ms2, ms3);
+//DRV8825 stepper (MOTOR_STEPS, DIR_PIN, STP_, ms1, ms2, ms3); //(steps per rev, dir pin, step pin, ms1, ms2, ms3)
+
+// 2-wire basic config, microstepping is hardwired on the driver
+BasicStepperDriver stepper(MOTOR_STEPS, DIR, STEP);
+
+//Uncomment line to use enable/disable functionality
+//BasicStepperDriver stepper(MOTOR_STEPS, DIR, STEP, ENABLE);
 
 void setup() {
-  //Set target motor RPM to 1RPM and microstepping at resolution 1 (full)
-  stepper.begin(RPM, MICROSTEPS);
+    stepper.begin(RPM, MICROSTEPS);
 }
 
 void loop() {
-  stepper.move (); //
+
+    // energize coils - the motor will hold position
+    // stepper.enable();
+
+    /*
+     * Moving motor one full revolution using the degree notation
+     */
+    stepper.rotate(360);
+
+    /*
+     * Moving motor to original position using steps
+     */
+    stepper.move(-200*MICROSTEPS);
+
+    // pause and allow the motor to be moved by hand
+    stepper.disable();
+
+    delay(5000);
 }
 
 
