@@ -12,11 +12,12 @@ Details:
 #include "DRV8825.h"
 
 // Pin Definitions
-#define DIR_PIN     8
-#define STEP_PIN    9
+#define STEP_PIN    5
+#define DIR_PIN     6
+#define SLEEP_PIN   9  // HIGH enables driver and LOW puts it to sleep
 #define POT_PIN     A0 // Sense voltage on Potentiometer wiper
-#define SWITCH_PIN  A1 // Sense reed switch (LOW is open and HIGH is closed)
-#define ENABLE_PIN
+#define REED_PIN    A1 // Sense reed switch (LOW is open and HIGH is closed)
+
 // Motor steps per revolution. Most steppers are 200 steps or 1.8 degrees/step
 #define MOTOR_STEPS 200
 #define RPM 60
@@ -25,13 +26,26 @@ Details:
 DRV8825 stepper(MOTOR_STEPS, DIR_PIN, STEP_PIN);
 
 void setup() {
-    stepper.begin(RPM, MICROSTEPS);
+  stepper.begin(RPM, MICROSTEPS);
+
+  // Initialize pins
+  pinMode(STEP_PIN,OUTPUT);
+  pinMode(DIR_PIN,OUTPUT);
+  pinMode(SLEEP_PIN,OUTPUT);
 }
 
 void loop() {
 
-    // Move motor using steps since each step is 1.8 degrees
-    stepper.move(200*MICROSTEPS);
+  // Enable stepper driver
+  digitalWrite(SLEEP_PIN,HIGH);
 
-    delay(3000);
+  /** Move motor using steps since each step is 1.8
+  * Positive to move forward, negative to reverse
+  */
+  stepper.move(200*MICROSTEPS);
+
+  // Disable stepper driver to allow for manual movement
+  digitalWrite(SLEEP_PIN,LOW);
+
+  delay(3000);
 }
