@@ -20,17 +20,16 @@ Details:
 
 // Motor steps per revolution. Most steppers are 200 steps or 1.8 degrees/step
 #define MOTOR_STEPS 200
-#define RPM 60
+#define RPM 16
 #define MICROSTEPS 1  // 1=full step, 2=half step etc.
 
 DRV8825 stepper(MOTOR_STEPS, DIR_PIN, STEP_PIN);
 
 void setup() {
+  // Initialize stepper
   stepper.begin(RPM, MICROSTEPS);
 
   // Initialize pins
-  pinMode(STEP_PIN,OUTPUT);
-  pinMode(DIR_PIN,OUTPUT);
   pinMode(SLEEP_PIN,OUTPUT);
 }
 
@@ -42,7 +41,7 @@ void loop() {
   /** Move motor using steps since each step is 1.8
   * Positive to move forward, negative to reverse
   */
-  stepper.move(200*MICROSTEPS);
+  stepper.move(200);
 
   // Disable stepper driver to allow for manual movement
   digitalWrite(SLEEP_PIN,LOW);
