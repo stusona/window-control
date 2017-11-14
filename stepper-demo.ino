@@ -1,29 +1,51 @@
-const int stepPin = 3;
-const int dirPin = 4;
-const int sleepPin = 5;
-const int period = 1500;
+/**
+ Stepper Demo for testing stepper motor setup
+ By Stuart Sonatina and Jacquie Nguyen
+ IDD - 209U, UC Berkeley, November 2017
+
+ Details:
+
+  Uses DRV8825 pololu stepper driver
+
+ */
+
+// Pin Definitions
+#define STEP_PIN    3
+#define DIR_PIN     4
+#define SLEEP_PIN   5  // HIGH enables driver and LOW puts it to sleep
+//#define POT_PIN     A0 // Sense voltage on Potentiometer wiper
+//#define REED_PIN    A1 // Sense reed switch (LOW is open and HIGH is closed)
+
+// Motor steps per revolution. Most steppers are 200 steps or 1.8 degrees/step
+#define STEPS_PER_REV 200
+#define RPM 10
+#define PERIOD 3000; // microseconds
+
 
 void setup() {
-  // Sets the two pins as Outputs
-  pinMode(stepPin,OUTPUT);
-  pinMode(dirPin,OUTPUT);
-  pinMode(sleepPin,OUTPUT);
+  // Initialize pis
+  pinMode(STEP_PIN, OUTPUT);
+  pinMode(DIR_PIN, OUTPUT);
+  pinMode(SLEEP_PIN,OUTPUT);
+
+  // Make sure stepper driver is off
+  digitalWrite(SLEEP_PIN, LOW);
 }
 
 void loop() {
-  // enable driver and set direction
-  digitalWrite(sleepPin, HIGH);
+
+  // Enable stepper driver and set direction
+  digitalWrite(SLEEP_PIN,HIGH);
   digitalWrite(dirPin,HIGH);
-
-  // 200 pulses is one full cycle
-  for(int x = 0; x < 2000; x++) {
+  
+  // turn 10 times
+  for(int x = 0; x < STEPS_PER_REV*RPM; x++) {
     digitalWrite(stepPin,HIGH);
-    delayMicroseconds(period);
+    delayMicroseconds(PERIOD/2);
     digitalWrite(stepPin,LOW);
-    delayMicroseconds(period);
+    delayMicroseconds(PERIOD/2);
   }
-
-  digitalWrite(sleepPin, LOW);
-
-  delay(3000); // One second delay
+  
+  // Disable stepper driver to allow for manual movement
+  digitalWrite(SLEEP_PIN,LOW);
 }
