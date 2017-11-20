@@ -161,13 +161,10 @@ void setup(void)
   Serial.println();
 }
 
-int *p_some_int;
-int32_t some_int = 9;
-String some_string;
-//p_some_int = &some_int;
+int32_t window_pos = 9;
 boolean valueChanged = false;
 
-char c[10];
+
 void loop(void)
 {
   int pos = random(50, 100);
@@ -184,15 +181,15 @@ void loop(void)
 //  ble.print( F(",00-") );
 //  ble.println(pos, HEX);
 
-   ble.sendCommandWithIntReply(F("AT+GATTCHAR=1"), &some_int);
-//  some_int = ble.atcommand("AT+GATTCHAR=1");
-  Serial.print("some_int: ");
-  Serial.println(some_int);
+   ble.sendCommandWithIntReply(F("AT+GATTCHAR=1"), &window_pos);
+//  window_pos = ble.atcommand("AT+GATTCHAR=1");
+  Serial.print("window_pos: ");
+  Serial.println(window_pos);
 
-  some_string = ble.read();
-  Serial.print("some_string: ");
-  Serial.println(some_string);
-              
+//  some_string = ble.read();
+//  Serial.print("some_string: ");
+//  Serial.println(some_string);
+//              
 
   /* Check if command executed OK */
   if ( !ble.waitForOK() )
@@ -201,7 +198,7 @@ void loop(void)
   }
 
 
-switch (some_int) {
+switch (window_pos) {
     case 0: // open window
     {
       // Enable stepper driver and set direction
@@ -219,7 +216,7 @@ switch (some_int) {
       // Turn stepper driver off
       digitalWrite(SLEEP_PIN, LOW);
 
-    some_int = -1;
+    window_pos = -1;
     
   
 
@@ -244,14 +241,14 @@ switch (some_int) {
       // Turn stepper driver off
       digitalWrite(SLEEP_PIN, LOW);
 
-      some_int = -1;
+      window_pos = -1;
 
       break;
     }
 
     default:
     {
-      some_int = -1;
+      window_pos = -1;
       // Make sure stepper driver is off
       digitalWrite(SLEEP_PIN, LOW);
     }
