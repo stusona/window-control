@@ -80,6 +80,12 @@ float pot_min = 0;
 float pot_scale  = 100/(pot_max-pot_min);
 
 
+//Initialize window control variables
+int32_t window_pos = 0;
+int32_t window_setpoint = 0;
+boolean valueChanged = false;
+
+
 /**************************************************************************/
 /*!
     @brief  Sets up the HW an the BLE module (this function is called
@@ -151,14 +157,14 @@ void setup(void)
   
   /* Position characteristic */
   Serial.println(F("Adding the position characteristic  "));
-  success = ble.sendCommandWithIntReply( F("AT+GATTADDCHAR=UUID128=something, PROPERTIES=0x08, MIN_LEN=1, MAX_LEN=4, VALUE=1000000000"), &positionCharID);
+  success = ble.sendCommandWithIntReply( F("AT+GATTADDCHAR=UUID128=57-12-04-BC-B3-96-42-97-A5-13-31-1C-45-71-C0-23, PROPERTIES=0x08, MIN_LEN=1, MAX_LEN=4, VALUE=1000000000"), &positionCharID);
     if (! success) {
     error(F("Could not add position characteristic"));
   }
 
    /* Setpoint characteristic */
   Serial.println(F("Adding the setpoint characteristic  "));
-  success = ble.sendCommandWithIntReply( F("AT+GATTADDCHAR=UUID128=UUID128=19-9b-42-78-8c-07-4e-71-bd-0d-7f-4e-1f-d5-76-d2, PROPERTIES=0x08, MIN_LEN=1, MAX_LEN=4, VALUE=1000000000"), &setpointCharID);
+  success = ble.sendCommandWithIntReply( F("AT+GATTADDCHAR=UUID128=19-9b-42-78-8c-07-4e-71-bd-0d-7f-4e-1f-d5-76-d2, PROPERTIES=0x08, MIN_LEN=1, MAX_LEN=4, VALUE=1000000000"), &setpointCharID);
     if (! success) {
     error(F("Could not add setpoint characteristic"));
   }
@@ -173,122 +179,43 @@ void setup(void)
   ble.reset();
 
   Serial.println();
+
+//  intialize window control variables to starting state
+  window_pos = readPosition();
+  window_setpoint = window_pos;
+  Serial.print("Starting window position: ");
+  Serial.println(window_pos);
 }
-
-int32_t window_pos = 9;
-boolean valueChanged = false;
-
 
 void loop(void)
 {
-//  int pos = random(50, 100);
-//
-//  Serial.print(F("Updating Pos value to "));
-//  Serial.print(pos);
-//  Serial.println(F(" ."));
-
   /* Command is sent when \n (\r) or println is called */
   /* AT+GATTCHAR=CharacteristicID,value */
-  ble.print( F("AT+GATTCHAR=") );
-  ble.println( setpointCharID );
- 
-//  ble.print( F(",00-") );
-//  ble.println(pos, HEX);
 
-   ble.sendCommandWithIntReply(F("AT+GATTCHAR=1"), &window_pos);
-//  window_pos = ble.atcommand("AT+GATTCHAR=1");
-  Serial.print("window_pos: ");
+  window_pos = readPosition();
+  Serial.print("Window is at: ");
   Serial.println(window_pos);
+  broadcastPosition();
 
-//  some_string = ble.read();
-//  Serial.print("some_string: ");
-//  Serial.println(some_string);
-//              
+  readSetpoint();  
 
-  /* Check if command executed OK */
-  if ( !ble.waitForOK() )
-  {
-    Serial.println(F("Failed to get response!"));
-  }
+  moveMotor(window_setpoint);
 
-
-switch (window_pos) {
-    case 0: // open window
-    {
-      // Enable stepper driver and set direction
-      digitalWrite(SLEEP_PIN,HIGH);
-      digitalWrite(DIR_PIN,LOW);
-
-      // turn 10 times
-      for(int x = 0; x < STEPS_PER_REV*5; x++) {
-        digitalWrite(STEP_PIN,HIGH);
-        delayMicroseconds(PERIOD/2);
-        digitalWrite(STEP_PIN,LOW);
-        delayMicroseconds(PERIOD/2);
-      }
-
-      // Turn stepper driver off
-      digitalWrite(SLEEP_PIN, LOW);
-
-    window_pos = -1;
-    
+  broadcastPosition();
   
-
-
-      break;
-    }
-
-    case 1: // close window
-    {
-      // Enable stepper driver and set direction
-      digitalWrite(SLEEP_PIN,HIGH);
-      digitalWrite(DIR_PIN,HIGH);
-
-      // turn 10 times
-      for(int x = 0; x < STEPS_PER_REV*5; x++) {
-        digitalWrite(STEP_PIN,HIGH);
-        delayMicroseconds(PERIOD/2);
-        digitalWrite(STEP_PIN,LOW);
-        delayMicroseconds(PERIOD/2);
-      }
-
-      // Turn stepper driver off
-      digitalWrite(SLEEP_PIN, LOW);
-
-      window_pos = -1;
-
-      break;
-    }
-
-    default:
-    {
-      window_pos = -1;
-      // Make sure stepper driver is off
-      digitalWrite(SLEEP_PIN, LOW);
-    }
-  }
-  ble.print( F("AT+GATTCHAR=") );
-  ble.print( positionCharID );
- 
-  ble.println( F(",03-00-00-00") );
-
-  // Disable stepper driver to allow for manual movement
-  digitalWrite(SLEEP_PIN,LOW);
-
-
-
-  // Disable stepper driver to allow for manual movement
-  digitalWrite(SLEEP_PIN,LOW);
-  
-
-
   /* Delay before next measurement update */
   delay(1000);
 }
 
-void moveMotor(int currentPos, int setpoint){
+void moveMotor(int setpoint){
   int timeout = 0;
-  while (abs(currentPos - setpoint) > 0.15){
+  int currentPos = readPosition();
+  Serial.print("Move to ");
+  Serial.print(setpoint);
+  Serial.print(" from ");
+  Serial.println(currentPos);
+  
+  while (abs(currentPos - setpoint) > 2){
      // Enable stepper driver and set direction
       digitalWrite(SLEEP_PIN,HIGH);
 
@@ -309,7 +236,7 @@ void moveMotor(int currentPos, int setpoint){
       currentPos = readPosition();
       
       timeout++;
-      if (timeout>1000){
+      if (timeout>10000){
         Serial.println("moveMotor timed out.");
         break;
       }
@@ -317,6 +244,9 @@ void moveMotor(int currentPos, int setpoint){
   // Turn stepper driver off
   digitalWrite(SLEEP_PIN, LOW);  
 
+  Serial.print("Finished moving to ");
+  Serial.println(setpoint);
+  
   return;
 }
 
@@ -325,6 +255,31 @@ int readPosition(){
   window_pos -= pot_min;
   window_pos *= pot_scale;
   return window_pos;
+}
+
+void broadcastPosition(){
+  int currentPos = readPosition();
+  ble.print( F("AT+GATTCHAR=") );
+  ble.print( positionCharID );
+  ble.print(F(","));
+  ble.print(currentPos, HEX);
+  ble.println( F("-00-00-00") );
+  return;
+}
+
+void readSetpoint(){
+//  ble.print( F("AT+GATTCHAR=") );
+//  ble.println( setpointCharID );
+
+  ble.sendCommandWithIntReply(F("AT+GATTCHAR=2"), &window_setpoint);
+  Serial.print("window_setpoint: ");
+  Serial.println(window_setpoint);
+
+  /* Check if command executed OK */
+  if ( !ble.waitForOK() )
+  {
+    Serial.println(F("Failed to get response!"));
+  }
 }
 
 
