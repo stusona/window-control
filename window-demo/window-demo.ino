@@ -34,7 +34,7 @@
 #define STEP_PIN    5
 #define DIR_PIN     6
 #define SLEEP_PIN   9  // HIGH enables driver and LOW puts it to sleep
-//#define POT_PIN     A0 // Sense voltage on Potentiometer wiper
+#define POT_PIN     A0 // Sense voltage on Potentiometer wiper
 //#define REED_PIN    A1 // Sense reed switch (LOW is open and HIGH is closed)
 
 // Motor steps per revolution. Most steppers are 200 steps or 1.8 degrees/step
@@ -72,6 +72,13 @@ void error(const __FlashStringHelper*err) {
 /* The service information */
 int32_t customServiceID;
 int32_t positionCharID;
+int32_t setpointCharID;
+
+// Define potentiomete scale
+float pot_max = 5;
+float pot_min = 0;
+float pot_scale  = 100/(pot_max-pot_min);
+
 
 /**************************************************************************/
 /*!
@@ -144,9 +151,16 @@ void setup(void)
   
   /* Position characteristic */
   Serial.println(F("Adding the position characteristic  "));
-  success = ble.sendCommandWithIntReply( F("AT+GATTADDCHAR=UUID128=19-9b-42-78-8c-07-4e-71-bd-0d-7f-4e-1f-d5-76-d2, PROPERTIES=0x08, MIN_LEN=1, MAX_LEN=4, VALUE=1000000000"), &positionCharID);
+  success = ble.sendCommandWithIntReply( F("AT+GATTADDCHAR=UUID128=something, PROPERTIES=0x08, MIN_LEN=1, MAX_LEN=4, VALUE=1000000000"), &positionCharID);
     if (! success) {
     error(F("Could not add position characteristic"));
+  }
+
+   /* Setpoint characteristic */
+  Serial.println(F("Adding the setpoint characteristic  "));
+  success = ble.sendCommandWithIntReply( F("AT+GATTADDCHAR=UUID128=UUID128=19-9b-42-78-8c-07-4e-71-bd-0d-7f-4e-1f-d5-76-d2, PROPERTIES=0x08, MIN_LEN=1, MAX_LEN=4, VALUE=1000000000"), &setpointCharID);
+    if (! success) {
+    error(F("Could not add setpoint characteristic"));
   }
 
   /* Add the Heart Rate Service to the advertising data (needed for Nordic apps to detect the service) */
@@ -167,16 +181,16 @@ boolean valueChanged = false;
 
 void loop(void)
 {
-  int pos = random(50, 100);
-
-  Serial.print(F("Updating Pos value to "));
-  Serial.print(pos);
-  Serial.println(F(" ."));
+//  int pos = random(50, 100);
+//
+//  Serial.print(F("Updating Pos value to "));
+//  Serial.print(pos);
+//  Serial.println(F(" ."));
 
   /* Command is sent when \n (\r) or println is called */
   /* AT+GATTCHAR=CharacteristicID,value */
   ble.print( F("AT+GATTCHAR=") );
-  ble.println( positionCharID );
+  ble.println( setpointCharID );
  
 //  ble.print( F(",00-") );
 //  ble.println(pos, HEX);
@@ -254,9 +268,9 @@ switch (window_pos) {
     }
   }
   ble.print( F("AT+GATTCHAR=") );
-    ble.print( positionCharID );
+  ble.print( positionCharID );
  
-    ble.println( F(",03-00-00-00") );
+  ble.println( F(",03-00-00-00") );
 
   // Disable stepper driver to allow for manual movement
   digitalWrite(SLEEP_PIN,LOW);
@@ -271,3 +285,46 @@ switch (window_pos) {
   /* Delay before next measurement update */
   delay(1000);
 }
+
+void moveMotor(int currentPos, int setpoint){
+  int timeout = 0;
+  while (abs(currentPos - setpoint) > 0.15){
+     // Enable stepper driver and set direction
+      digitalWrite(SLEEP_PIN,HIGH);
+
+      if ((currentPos - setpoint) > 0){
+        digitalWrite(DIR_PIN,LOW);
+      }
+      else{
+        digitalWrite(DIR_PIN,HIGH);
+      }
+
+      // turn 10 times
+   
+      digitalWrite(STEP_PIN,HIGH);
+      delayMicroseconds(PERIOD/2);
+      digitalWrite(STEP_PIN,LOW);
+      delayMicroseconds(PERIOD/2);
+     
+      currentPos = readPosition();
+      
+      timeout++;
+      if (timeout>1000){
+        Serial.println("moveMotor timed out.");
+        break;
+      }
+  }
+  // Turn stepper driver off
+  digitalWrite(SLEEP_PIN, LOW);  
+
+  return;
+}
+
+int readPosition(){
+  window_pos = analogRead(POT_PIN);
+  window_pos -= pot_min;
+  window_pos *= pot_scale;
+  return window_pos;
+}
+
+
