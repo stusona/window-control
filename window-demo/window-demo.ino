@@ -282,4 +282,37 @@ void readSetpoint(){
   }
 }
 
+/*******************************************************************************
+* float setMotor()
+*
+* Set the motor to a speed and direction
+* Has saturation protection
+*******************************************************************************/
+float setMotor(float motorSpeed)
+{
+  // Set motor direction
+  if (motorSpeed>0)
+  {
+    digitalWrite(FWD_PIN,HIGH);
+    digitalWrite(REV_PIN,LOW);
+  }
+  else
+  {
+    digitalWrite(FWD_PIN,LOW);
+    digitalWrite(REV_PIN,HIGH);
+  }
+  
+  // Saturation protection
+  if (motorSpeed> 100){motorSpeed= 100.0;}
+  if (motorSpeed<-100){motorSpeed=-100.0;}
+
+  // convert 0-100% to 0-255 duty cycle
+  int motorDuty = map(abs(motorSpeed),0,100,0,255);
+
+  // send PWM to motor
+  analogWrite(PWM_PIN,motorDuty);
+
+  // Return the actual controller output with saturation protection
+  return motorSpeed;
+}
 
