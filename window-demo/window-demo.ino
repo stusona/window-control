@@ -31,17 +31,11 @@
 
 
 // Pin Definitions
-#define STEP_PIN    5
-#define DIR_PIN     6
-#define SLEEP_PIN   9  // HIGH enables driver and LOW puts it to sleep
+#define FWD_PIN     5
+#define REV_PIN     6
+#define PWM_PIN     9  // Enable pin on Motor Driver
 #define POT_PIN     A0 // Sense voltage on Potentiometer wiper
 //#define REED_PIN    A1 // Sense reed switch (LOW is open and HIGH is closed)
-
-// Motor steps per revolution. Most steppers are 200 steps or 1.8 degrees/step
-#define STEPS_PER_REV 200
-#define RPM 10
-#define PERIOD 3000 // microseconds
-
 
 // Create the bluefruit object, either software serial...uncomment these lines
 /*
