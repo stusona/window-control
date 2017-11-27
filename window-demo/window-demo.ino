@@ -36,7 +36,7 @@
 #define TIMEOUT   10000 // ms
 
 // Constants
-#define KP            10
+#define KP            -10
 #define MAX_ERROR     2   // allowable steady state error (percent)
 #define REED_OFFSET   2   // Amount window needs to move past triggering
                           // of reed switch (percent)
@@ -60,8 +60,8 @@ int32_t setpointCharID;
 
 // Define potentiometer scale (can be between 0 and 1023)
 // This needs to be calibrated. Let's start with a small range in the middle.
-float pot_min = 500; // adc counts
-float pot_max = 600; // adc counts
+float pot_min = 0; // adc counts
+float pot_max = 1023; // adc counts
 float pot_scale  = 100.0/(pot_max-pot_min); // percent / adc counts
 
 //Initialize window control variables
@@ -137,7 +137,7 @@ void setup(void)
   /* Change the device name to make it easier to find */
   Serial.println(F("Setting device name to 'Aurai Window Module': "));
 
-  if (! ble.sendCommandCheckOK(F("AT+GAPDEVNAME=Aurai Window Module")) ) {
+  if (! ble.sendCommandCheckOK(F("AT+GAPDEVNAME=Aurai Window Mod")) ) {
     error(F("Could not set device name?"));
   }
 
@@ -267,10 +267,10 @@ int moveWindow(int setpoint) {
 
   // Read pot position and print to serial monitor
   pos_current = readPosition();
-  Serial.print("Move to ");
-  Serial.print(setpoint);
-  Serial.print(" from ");
-  Serial.println(pos_current);
+  Serial.print("Move from ");
+  Serial.print(pos_current);
+  Serial.print(" to ");
+  Serial.println(setpoint);
   
   // While error is above max and run time is less than timeout, drive motor
   // towards setpoint
@@ -280,7 +280,8 @@ int moveWindow(int setpoint) {
     pos_current = readPosition(); // percent
     
     // set motor speed and print to serial monitor
-    Serial.println(setMotor(KP*(pos_current - setpoint)));
+//    Serial.println(setMotor(KP*(pos_current - setpoint)));
+    setMotor(KP*(pos_current - setpoint));
     
     runTime = millis() - startTime; // ms
     
@@ -315,7 +316,7 @@ int readPosition() {
   
   // If position is below min or above max, something is wrong
   if ((pos_current < pot_min) || (pos_current > pot_max)) {
-    Serial.println("Window out of range");
+//    Serial.println("Window out of range");
   }
   
   pos_current -= pot_min;   // subtract minimum from position
@@ -352,6 +353,8 @@ void readSetpoint() {
 //  ble.println( setpointCharID );
 
   ble.sendCommandWithIntReply(F("AT+GATTCHAR=2"), &pos_setpoint);
+  ble.sendCommandWithIntReply(F("AT+GATTCHAR=2"), &pos_setpoint);
+  pos_setpoint = (pos_setpoint/10)*16 + pos_setpoint%10;
   Serial.print("pos_setpoint: ");
   Serial.println(pos_setpoint);
 
