@@ -157,7 +157,7 @@ void setup(void)
   
   /* Position characteristic */
   Serial.println(F("Adding the position characteristic  "));
-  success = ble.sendCommandWithIntReply( F("AT+GATTADDCHAR=UUID128=57-12-04-BC-B3-96-42-97-A5-13-31-1C-45-71-C0-23, PROPERTIES=0x08, MIN_LEN=1, MAX_LEN=4, VALUE=1000000000"), &positionCharID);
+  success = ble.sendCommandWithIntReply( F("AT+GATTADDCHAR=UUID128=57-12-04-BC-B3-96-42-97-A5-13-31-1C-45-71-C0-23, PROPERTIES=0x02, MIN_LEN=1, MAX_LEN=4, VALUE=1000000000"), &positionCharID);
     if (! success) {
     error(F("Could not add position characteristic"));
   }
@@ -193,10 +193,13 @@ void loop(void)
   /* AT+GATTCHAR=CharacteristicID,value */
 
   window_pos = readPosition();
-  Serial.print("Window is at: ");
+  Serial.print("Window position: ");
   Serial.println(window_pos);
   broadcastPosition();
 
+//  ble.sendCommandWithIntReply(F("AT+GATTCHAR=2"), &window_setpoint);
+//  Serial.print("window_setpoint2: ");
+//  Serial.println(window_setpoint);
   readSetpoint();  
 
   moveMotor(window_setpoint);
@@ -210,10 +213,10 @@ void loop(void)
 void moveMotor(int setpoint){
   int timeout = 0;
   int currentPos = readPosition();
-  Serial.print("Move to ");
-  Serial.print(setpoint);
-  Serial.print(" from ");
-  Serial.println(currentPos);
+  Serial.print("Move from ");
+  Serial.print(currentPos);
+  Serial.print(" to ");
+  Serial.println(setpoint);
   
   while (abs(currentPos - setpoint) > 2){
      // Enable stepper driver and set direction
@@ -236,7 +239,7 @@ void moveMotor(int setpoint){
       currentPos = readPosition();
       
       timeout++;
-      if (timeout>10000){
+      if (timeout>1000){
         Serial.println("moveMotor timed out.");
         break;
       }
@@ -245,7 +248,8 @@ void moveMotor(int setpoint){
   digitalWrite(SLEEP_PIN, LOW);  
 
   Serial.print("Finished moving to ");
-  Serial.println(setpoint);
+  currentPos = readPosition();
+  Serial.println(currentPos);
   
   return;
 }
@@ -254,6 +258,7 @@ int readPosition(){
   window_pos = analogRead(POT_PIN);
   window_pos -= pot_min;
   window_pos *= pot_scale;
+  window_pos /= 10;
   return window_pos;
 }
 
@@ -264,6 +269,10 @@ void broadcastPosition(){
   ble.print(F(","));
   ble.print(currentPos, HEX);
   ble.println( F("-00-00-00") );
+  ble.print( F("AT+GATTCHAR=") );
+  ble.println( positionCharID );
+  Serial.print("Window position: ");
+  Serial.println(currentPos);
   return;
 }
 
@@ -272,6 +281,8 @@ void readSetpoint(){
 //  ble.println( setpointCharID );
 
   ble.sendCommandWithIntReply(F("AT+GATTCHAR=2"), &window_setpoint);
+  ble.sendCommandWithIntReply(F("AT+GATTCHAR=2"), &window_setpoint);
+  window_setpoint = (window_setpoint/10)*16 + window_setpoint%10;
   Serial.print("window_setpoint: ");
   Serial.println(window_setpoint);
 
