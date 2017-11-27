@@ -1,16 +1,11 @@
-/*********************************************************************
- This is an example for our nRF51822 based Bluefruit LE modules
-
- Pick one up today in the adafruit shop!
-
- Adafruit invests time and resources providing this open source code,
- please support Adafruit and open-source hardware by purchasing
- products from Adafruit!
-
- MIT license, check LICENSE for more information
- All text above, and the splash screen below must be included in
- any redistribution
-*********************************************************************/
+/******************************************************************************
+ * Takes setpoints over bluetooth, moves window, then sends position data back.
+ *
+ * by Ashis Ghosh, Stuart Sonatina, Jacquie Nguyen, and Michael Oudenhoven
+ *
+ * Based on an example built by Adafruit: nRF51822 based Bluefruit LE modules
+ *
+ *****************************************************************************/
 
 /*
     Please note the long strings of data sent mean the RTS pin is
@@ -22,7 +17,6 @@
 #include "Adafruit_BLE.h"
 #include "Adafruit_BluefruitLE_SPI.h"
 #include "Adafruit_BluefruitLE_UART.h"
-
 #include "BluefruitConfig.h"
 
 #if SOFTWARE_SERIAL_AVAILABLE
@@ -31,37 +25,27 @@
 
 
 // Pin Definitions
-#define STEP_PIN    5
-#define DIR_PIN     6
-#define SLEEP_PIN   9  // HIGH enables driver and LOW puts it to sleep
+#define FWD_PIN     5
+#define REV_PIN     6
+#define PWM_PIN     9  // Enable pin on Motor Driver
 #define POT_PIN     A0 // Sense voltage on Potentiometer wiper
-//#define REED_PIN    A1 // Sense reed switch (LOW is open and HIGH is closed)
-
-// Motor steps per revolution. Most steppers are 200 steps or 1.8 degrees/step
-#define STEPS_PER_REV 200
-#define RPM 10
-#define PERIOD 3000 // microseconds
+#define REED_PIN    A1 // Sense reed switch (LOW is open and HIGH is closed)
 
 
-// Create the bluefruit object, either software serial...uncomment these lines
-/*
-SoftwareSerial bluefruitSS = SoftwareSerial(BLUEFRUIT_SWUART_TXD_PIN, BLUEFRUIT_SWUART_RXD_PIN);
+// Number of milliseconds before moveWindow times out
+#define TIMEOUT   10000 // ms
 
-Adafruit_BluefruitLE_UART ble(bluefruitSS, BLUEFRUIT_UART_MODE_PIN,
-                      BLUEFRUIT_UART_CTS_PIN, BLUEFRUIT_UART_RTS_PIN);
-*/
+// Constants
+#define KP            10
+#define MAX_ERROR     2   // allowable steady state error (percent)
+#define REED_OFFSET   2   // Amount window needs to move past triggering
+                          // of reed switch (percent)
 
-/* ...or hardware serial, which does not need the RTS/CTS pins. Uncomment this line */
-// Adafruit_BluefruitLE_UART ble(BLUEFRUIT_HWSERIAL_NAME, BLUEFRUIT_UART_MODE_PIN);
-
-/* ...hardware SPI, using SCK/MOSI/MISO hardware SPI pins and then user selected CS/IRQ/RST */
+/** Create the bluefruit object
+ * Hardware SPI, using SCK/MOSI/MISO hardware SPI pins and then user-selected
+ * CS/IRQ/RST
+ */
 Adafruit_BluefruitLE_SPI ble(BLUEFRUIT_SPI_CS, BLUEFRUIT_SPI_IRQ, BLUEFRUIT_SPI_RST);
-
-/* ...software SPI, using SCK/MOSI/MISO user-defined SPI pins and then user selected CS/IRQ/RST */
-//Adafruit_BluefruitLE_SPI ble(BLUEFRUIT_SPI_SCK, BLUEFRUIT_SPI_MISO,
-//                             BLUEFRUIT_SPI_MOSI, BLUEFRUIT_SPI_CS,
-//                             BLUEFRUIT_SPI_IRQ, BLUEFRUIT_SPI_RST);
-
 
 // A small helper
 void error(const __FlashStringHelper*err) {
@@ -74,35 +58,45 @@ int32_t customServiceID;
 int32_t positionCharID;
 int32_t setpointCharID;
 
-// Define potentiomete scale
-float pot_max = 5;
-float pot_min = 0;
-float pot_scale  = 100/(pot_max-pot_min);
-
+// Define potentiometer scale (can be between 0 and 1023)
+// This needs to be calibrated. Let's start with a small range in the middle.
+float pot_min = 500; // adc counts
+float pot_max = 600; // adc counts
+float pot_scale  = 100.0/(pot_max-pot_min); // percent / adc counts
 
 //Initialize window control variables
-int32_t window_pos = 0;
-int32_t window_setpoint = 0;
+int32_t pos_current = 0;
+int32_t pos_setpoint = 0;
 boolean valueChanged = false;
 
 
 /**************************************************************************/
-/*!
-    @brief  Sets up the HW an the BLE module (this function is called
-            automatically on startup)
-*/
-/**************************************************************************/
+
 void setup(void)
 {
   // Initialize pins
-  pinMode(STEP_PIN, OUTPUT);
-  pinMode(DIR_PIN, OUTPUT);
-  pinMode(SLEEP_PIN,OUTPUT);
+  pinMode(FWD_PIN, OUTPUT);
+  pinMode(REV_PIN, OUTPUT);
+  pinMode(PWM_PIN, OUTPUT);
+  pinMode(POT_PIN, INPUT);
+  pinMode(REED_PIN, INPUT);
 
   // Make sure stepper driver is off
-  digitalWrite(SLEEP_PIN, LOW);
-
+  digitalWrite(PWM_PIN, LOW);
   
+  // Intialize window control variables to starting state
+  pos_current = readPosition();
+  pos_setpoint = pos_current;
+  Serial.print("Starting window position: ");
+  Serial.println(pos_current);
+  
+  // Let's determine if we want to home the window right here
+  // *move window until reed switch triggers, then move additional offset*
+  // *call that position "pot_min"
+
+
+  //////////////////////// BEGIN ADAFRUIT BLUETOOTH CODE ///////////////////////
+  // Set up the BLE module
   while (!Serial); // required for Flora & Micro
   delay(500);
 
@@ -119,7 +113,7 @@ void setup(void)
 
   if ( !ble.begin(VERBOSE_MODE) )
   {
-    error(F("Couldn't find Bluefruit, make sure it's in CoMmanD mode & check wiring?"));
+    error(F("Couldn't find Bluefruit, make sure it's in CoMmanD mode & check wiring"));
   }
   Serial.println( F("OK!") );
 
@@ -171,126 +165,230 @@ void setup(void)
 
   /* Add the Heart Rate Service to the advertising data (needed for Nordic apps to detect the service) */
   Serial.print(F("Adding Custom Service UUID to the advertising payload: "));
-//  ble.sendCommandCheckOK( F("AT+GAPSETADVDATA=02-06-b5-77-0a-18") );
-//ble.sendCommandCheckOK( F("AT+GAPSETADVDATA=02-01-06-05-02-b5-77-0a-18") );
+  //ble.sendCommandCheckOK( F("AT+GAPSETADVDATA=02-06-b5-77-0a-18") );
+  //ble.sendCommandCheckOK( F("AT+GAPSETADVDATA=02-01-06-05-02-b5-77-0a-18") );
   //ble.sendCommandCheckOK( F("AT+GAPSETADVDATA=02-01-06-05-02-0d-18-0a-18") );
+  
   /* Reset the device for the new service setting changes to take effect */
   Serial.print(F("Performing a SW reset (service changes require a reset): "));
   ble.reset();
 
   Serial.println();
-
-//  intialize window control variables to starting state
-  window_pos = readPosition();
-  window_setpoint = window_pos;
-  Serial.print("Starting window position: ");
-  Serial.println(window_pos);
+  
+////////////////////////// END ADAFRUIT BLUETOOTH CODE /////////////////////////
 }
+
+
+/**************************************************************************/
 
 void loop(void)
 {
   /* Command is sent when \n (\r) or println is called */
   /* AT+GATTCHAR=CharacteristicID,value */
 
-  window_pos = readPosition();
-  Serial.print("Window position: ");
-  Serial.println(window_pos);
-  broadcastPosition();
+
 
 //  ble.sendCommandWithIntReply(F("AT+GATTCHAR=2"), &window_setpoint);
 //  Serial.print("window_setpoint2: ");
 //  Serial.println(window_setpoint);
-  readSetpoint();  
 
-  moveMotor(window_setpoint);
+  // Print current position to serial monitor
+  pos_current = readPosition();
+  Serial.print("Window is at: ");
+  Serial.println(pos_current);
+  
+  // send position to Pico
+  broadcastPosition();
 
+  // read setpoint from Pico
+  readSetpoint();
+
+  // move the window to setpoint
+  moveWindow(pos_setpoint);
+
+  // window should be at setpoint now. Send position to Pico.
   broadcastPosition();
   
   /* Delay before next measurement update */
   delay(1000);
 }
 
-void moveMotor(int setpoint){
-  int timeout = 0;
-  int currentPos = readPosition();
-  Serial.print("Move from ");
-  Serial.print(currentPos);
-  Serial.print(" to ");
-  Serial.println(setpoint);
+//<<<<<<< HEAD
+//void moveMotor(int setpoint){
+//  int timeout = 0;
+//  int currentPos = readPosition();
+//  Serial.print("Move from ");
+//  Serial.print(currentPos);
+//  Serial.print(" to ");
+//  Serial.println(setpoint);
+//  
+//  while (abs(currentPos - setpoint) > 2){
+//     // Enable stepper driver and set direction
+//      digitalWrite(SLEEP_PIN,HIGH);
+//
+//      if ((currentPos - setpoint) > 0){
+//        digitalWrite(DIR_PIN,LOW);
+//      }
+//      else{
+//        digitalWrite(DIR_PIN,HIGH);
+//      }
+//
+//      // turn 10 times
+//   
+//      digitalWrite(STEP_PIN,HIGH);
+//      delayMicroseconds(PERIOD/2);
+//      digitalWrite(STEP_PIN,LOW);
+//      delayMicroseconds(PERIOD/2);
+//     
+//      currentPos = readPosition();
+//      
+//      timeout++;
+//      if (timeout>1000){
+//        Serial.println("moveMotor timed out.");
+//        break;
+//      }
+//=======
+
+///////////////////////////////////////////////////////////////////////////////
+//                          CUSTOM FUNCTIONS                                 //
+///////////////////////////////////////////////////////////////////////////////
+
+/******************************************************************************
+ * int moveWindow()
+ *
+ * Takes in a setpoint and moves window until error is below max error.
+ * Returns 0 upon success.
+******************************************************************************/
+int moveWindow(int setpoint) {
+
+  // Start a timer for the timeout
+  unsigned long startTime = millis();
+  unsigned long runTime = millis() - startTime;
+
+  // Read pot position and print to serial monitor
+  pos_current = readPosition();
+  Serial.print("Move to ");
+  Serial.print(setpoint);
+  Serial.print(" from ");
+  Serial.println(pos_current);
   
-  while (abs(currentPos - setpoint) > 2){
-     // Enable stepper driver and set direction
-      digitalWrite(SLEEP_PIN,HIGH);
-
-      if ((currentPos - setpoint) > 0){
-        digitalWrite(DIR_PIN,LOW);
-      }
-      else{
-        digitalWrite(DIR_PIN,HIGH);
-      }
-
-      // turn 10 times
-   
-      digitalWrite(STEP_PIN,HIGH);
-      delayMicroseconds(PERIOD/2);
-      digitalWrite(STEP_PIN,LOW);
-      delayMicroseconds(PERIOD/2);
-     
-      currentPos = readPosition();
-      
-      timeout++;
-      if (timeout>1000){
-        Serial.println("moveMotor timed out.");
-        break;
-      }
+  // While error is above max and run time is less than timeout, drive motor
+  // towards setpoint
+  while (abs(pos_current - setpoint) > MAX_ERROR
+         && (runTime < TIMEOUT)) {
+    
+    pos_current = readPosition(); // percent
+    
+    // set motor speed and print to serial monitor
+    Serial.println(setMotor(KP*(pos_current - setpoint)));
+    
+    runTime = millis() - startTime; // ms
+    
+    delay(50); // 20 Hz
   }
-  // Turn stepper driver off
-  digitalWrite(SLEEP_PIN, LOW);  
 
-  Serial.print("Finished moving to ");
-  currentPos = readPosition();
-  Serial.println(currentPos);
+  // Stop motor
+  setMotor(0);
   
-  return;
+  // If runTime is close to timeout, then it probably timed out.
+  // Print whether window finished moving to position or timed out.
+  if (runTime > (TIMEOUT - 100)) {
+    Serial.println("moveWindow timed out");
+    return 1;
+  }
+  else {
+    Serial.print("Finished moving to ");
+    Serial.println(setpoint);
+    return 0;
+  }
 }
 
-int readPosition(){
-  window_pos = analogRead(POT_PIN);
-  window_pos -= pot_min;
-  window_pos *= pot_scale;
-  window_pos /= 10;
-  return window_pos;
+/******************************************************************************
+ * int readPosition()
+ *
+ * Returns position of window from 0% (closed) to 100% (open).
+ * Also checks for out of range.
+ *****************************************************************************/
+int readPosition() {
+  // get position in adc counts 0-1023
+  pos_current = analogRead(POT_PIN);
+  
+  // If position is below min or above max, something is wrong
+  if ((pos_current < pot_min) || (pos_current > pot_max)) {
+    Serial.println("Window out of range");
+  }
+  
+  pos_current -= pot_min;   // subtract minimum from position
+  pos_current *= pot_scale; // convert from adc counts to percent
+  return pos_current;
 }
 
-void broadcastPosition(){
-  int currentPos = readPosition();
+/******************************************************************************
+ * void broadcastPosition()
+ *
+ * Sends position back to Pico
+ *****************************************************************************/
+void broadcastPosition() {
+  pos_current = readPosition();
   ble.print( F("AT+GATTCHAR=") );
   ble.print( positionCharID );
   ble.print(F(","));
-  ble.print(currentPos, HEX);
+  ble.print(pos_current, HEX);
   ble.println( F("-00-00-00") );
   ble.print( F("AT+GATTCHAR=") );
   ble.println( positionCharID );
   Serial.print("Window position: ");
-  Serial.println(currentPos);
+  Serial.println(pos_current);
   return;
 }
 
-void readSetpoint(){
+/******************************************************************************
+ * void readSetpoint()
+ *
+ * Reads setpoint from Pico
+ *****************************************************************************/
+void readSetpoint() {
 //  ble.print( F("AT+GATTCHAR=") );
 //  ble.println( setpointCharID );
 
-  ble.sendCommandWithIntReply(F("AT+GATTCHAR=2"), &window_setpoint);
-  ble.sendCommandWithIntReply(F("AT+GATTCHAR=2"), &window_setpoint);
-  window_setpoint = (window_setpoint/10)*16 + window_setpoint%10;
-  Serial.print("window_setpoint: ");
-  Serial.println(window_setpoint);
+  ble.sendCommandWithIntReply(F("AT+GATTCHAR=2"), &pos_setpoint);
+  Serial.print("pos_setpoint: ");
+  Serial.println(pos_setpoint);
 
   /* Check if command executed OK */
-  if ( !ble.waitForOK() )
-  {
+  if ( !ble.waitForOK() ) {
     Serial.println(F("Failed to get response!"));
   }
 }
 
+/*******************************************************************************
+ * float setMotor()
+ *
+ * Set the motor to a speed and direction
+ * Has saturation protection
+ ******************************************************************************/
+float setMotor(float motorSpeed)
+{
+  // Set motor direction
+  if (motorSpeed>=0) {
+    digitalWrite(FWD_PIN,HIGH);
+    digitalWrite(REV_PIN,LOW);
+  }
+  else {
+    digitalWrite(FWD_PIN,LOW);
+    digitalWrite(REV_PIN,HIGH);
+  }
 
+  // Saturation protection
+  if (motorSpeed >  100) {motorSpeed =  100.0;}
+  if (motorSpeed < -100) {motorSpeed = -100.0;}
+
+  // convert 0-100% to 0-255 duty cycle
+  int motorDuty = map(abs(motorSpeed),0,100,0,255);
+
+  // send PWM to motor
+  analogWrite(PWM_PIN,motorDuty);
+
+  // Return the actual controller output with saturation protection
+  return motorSpeed;
+}
