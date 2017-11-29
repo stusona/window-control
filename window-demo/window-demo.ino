@@ -181,6 +181,8 @@ void setup(void)
 
 /**************************************************************************/
 
+int incomingByte = 0;
+
 void loop(void)
 {
   /* Command is sent when \n (\r) or println is called */
@@ -192,6 +194,7 @@ void loop(void)
 //  Serial.print("window_setpoint2: ");
 //  Serial.println(window_setpoint);
 
+  Serial.println("----------***--------------");
   // Print current position to serial monitor
   pos_current = readPosition();
   Serial.print("Window is at: ");
@@ -200,9 +203,31 @@ void loop(void)
   // send position to Pico
   broadcastPosition();
 
-  // read setpoint from Pico
-  readSetpoint();
+  Serial.println("----------------");
 
+  if (Serial.available() > 0) {
+    // read the incoming byte:
+     incomingByte = Serial.parseInt();
+
+     // say what you got:
+     Serial.print("I received: ");
+     Serial.println(incomingByte);
+
+     pos_setpoint = incomingByte;
+     
+     Serial.print("pos_setpoint: ");
+     Serial.println(pos_setpoint);
+     ble.print( F("AT+GATTCHAR=") );
+     ble.print( setpointCharID );
+     ble.print(F(","));
+     ble.print(pos_setpoint, HEX);
+     ble.println( F("-00-00-00") );
+  }
+  else{
+    readSetpoint();
+  }    
+
+  Serial.println("----------------");
   // move the window to setpoint
   moveWindow(pos_setpoint);
 

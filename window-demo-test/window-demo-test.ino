@@ -183,6 +183,7 @@ void setup(void)
   Serial.println(window_pos);
 }
 
+int incomingByte = 0;
 void loop(void)
 {
   /* Command is sent when \n (\r) or println is called */
@@ -193,9 +194,23 @@ void loop(void)
   Serial.println(window_pos);
   broadcastPosition();
 
-  readSetpoint();  
+  if (Serial.available() > 0) {
+    // read the incoming byte:
+    incomingByte = Serial.parseInt();
 
-  moveMotor(window_setpoint);
+     // say what you got:
+     Serial.print("I received: ");
+     Serial.println(incomingByte);
+
+     
+     Serial.print("window_setpoint: ");
+     Serial.println(window_setpoint);
+  }
+  else{
+    readSetpoint();
+  }    
+
+//  moveMotor(window_setpoint);
 
   broadcastPosition();
   
