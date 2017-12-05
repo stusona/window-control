@@ -36,7 +36,7 @@
 #define TIMEOUT   10000 // ms
 
 // Constants
-#define KP          -10
+#define KP            -10
 #define MAX_ERROR     2   // allowable steady state error (percent)
 #define REED_OFFSET   2   // Amount window needs to move past triggering
                           // of reed switch (percent)
@@ -60,9 +60,9 @@ int32_t setpointCharID;
 
 // Define potentiometer scale (can be between 0 and 1023)
 // This needs to be calibrated. Let's start with a small range in the middle.
-float pot_min = 0; // adc counts
-float pot_max = 1023; // adc counts
-float pot_scale  = 100.0/(pot_max-pot_min); // percent / adc counts
+float pot_close = 1023; // adc counts
+float pot_open = 0; // adc counts
+float pot_scale  = 100.0/(pot_close-pot_open); // percent / adc counts
 
 //Initialize window control variables
 int32_t pos_current = 0;
@@ -80,19 +80,25 @@ void setup(void)
   pinMode(PWM_PIN, OUTPUT);
   pinMode(POT_PIN, INPUT);
   pinMode(REED_PIN, INPUT);
+  
 
   // Make sure stepper driver is off
   digitalWrite(PWM_PIN, LOW);
 
+//  Initialize pot_close to starting analog value of potentiometer
+//  pot_close = analogRead(POT_PIN);
+//  pot_scale  = 100.0/(pot_close-pot_open);
+  
+  
   // Intialize window control variables to starting state
   pos_current = readPosition();
   pos_setpoint = pos_current;
   Serial.print("Starting window position: ");
   Serial.println(pos_current);
-
+  
   // Let's determine if we want to home the window right here
   // *move window until reed switch triggers, then move additional offset*
-  // *call that position "pot_min"
+  // *call that position "pot_close"
 
 
   //////////////////////// BEGIN ADAFRUIT BLUETOOTH CODE ///////////////////////
@@ -148,7 +154,7 @@ void setup(void)
   if (! success) {
     error(F("Could not add custom service"));
   }
-
+  
   /* Position characteristic */
   Serial.println(F("Adding the position characteristic  "));
   success = ble.sendCommandWithIntReply( F("AT+GATTADDCHAR=UUID128=57-12-04-BC-B3-96-42-97-A5-13-31-1C-45-71-C0-23, PROPERTIES=0x02, MIN_LEN=1, MAX_LEN=4, VALUE=1000000000"), &positionCharID);
@@ -168,13 +174,19 @@ void setup(void)
   //ble.sendCommandCheckOK( F("AT+GAPSETADVDATA=02-06-b5-77-0a-18") );
   //ble.sendCommandCheckOK( F("AT+GAPSETADVDATA=02-01-06-05-02-b5-77-0a-18") );
   //ble.sendCommandCheckOK( F("AT+GAPSETADVDATA=02-01-06-05-02-0d-18-0a-18") );
-
+  
   /* Reset the device for the new service setting changes to take effect */
   Serial.print(F("Performing a SW reset (service changes require a reset): "));
   ble.reset();
 
+//  Print intialized pot values
+//  Serial.print("Analog pot closed:  ");
+//  Serial.println(pot_close);
+//  Serial.print("Pot Scale: ");
+//  Serial.println(pot_scale);
+  
   Serial.println();
-
+  
 ////////////////////////// END ADAFRUIT BLUETOOTH CODE /////////////////////////
 }
 
@@ -188,6 +200,8 @@ void loop(void)
   /* Command is sent when \n (\r) or println is called */
   /* AT+GATTCHAR=CharacteristicID,value */
 
+
+
 //  ble.sendCommandWithIntReply(F("AT+GATTCHAR=2"), &window_setpoint);
 //  Serial.print("window_setpoint2: ");
 //  Serial.println(window_setpoint);
@@ -197,7 +211,7 @@ void loop(void)
   pos_current = readPosition();
   Serial.print("Window is at: ");
   Serial.println(pos_current);
-
+  
   // send position to Pico
   broadcastPosition();
 
@@ -212,7 +226,7 @@ void loop(void)
      Serial.println(incomingByte);
 
      pos_setpoint = incomingByte;
-
+     
      Serial.print("pos_setpoint: ");
      Serial.println(pos_setpoint);
      ble.print( F("AT+GATTCHAR=") );
@@ -223,7 +237,7 @@ void loop(void)
   }
   else{
     readSetpoint();
-  }
+  }    
 
   Serial.println("----------------");
   // move the window to setpoint
@@ -231,10 +245,46 @@ void loop(void)
 
   // window should be at setpoint now. Send position to Pico.
   broadcastPosition();
-
+  
   /* Delay before next measurement update */
   delay(1000);
 }
+
+//<<<<<<< HEAD
+//void moveMotor(int setpoint){
+//  int timeout = 0;
+//  int currentPos = readPosition();
+//  Serial.print("Move from ");
+//  Serial.print(currentPos);
+//  Serial.print(" to ");
+//  Serial.println(setpoint);
+//  
+//  while (abs(currentPos - setpoint) > 2){
+//     // Enable stepper driver and set direction
+//      digitalWrite(SLEEP_PIN,HIGH);
+//
+//      if ((currentPos - setpoint) > 0){
+//        digitalWrite(DIR_PIN,LOW);
+//      }
+//      else{
+//        digitalWrite(DIR_PIN,HIGH);
+//      }
+//
+//      // turn 10 times
+//   
+//      digitalWrite(STEP_PIN,HIGH);
+//      delayMicroseconds(PERIOD/2);
+//      digitalWrite(STEP_PIN,LOW);
+//      delayMicroseconds(PERIOD/2);
+//     
+//      currentPos = readPosition();
+//      
+//      timeout++;
+//      if (timeout>1000){
+//        Serial.println("moveMotor timed out.");
+//        break;
+//      }
+//=======
 
 ///////////////////////////////////////////////////////////////////////////////
 //                          CUSTOM FUNCTIONS                                 //
@@ -258,27 +308,26 @@ int moveWindow(int setpoint) {
   Serial.print(pos_current);
   Serial.print(" to ");
   Serial.println(setpoint);
-
+  
   // While error is above max and run time is less than timeout, drive motor
   // towards setpoint
   while (abs(pos_current - setpoint) > MAX_ERROR
          && (runTime < TIMEOUT)) {
-
+    
     pos_current = readPosition(); // percent
-
+    
     // set motor speed and print to serial monitor
-    // Serial.println(setMotor(KP*(pos_current - setpoint)));
+//    Serial.println(setMotor(KP*(pos_current - setpoint)));
     setMotor(KP*(pos_current - setpoint));
-
-    // update runTime
+    
     runTime = millis() - startTime; // ms
-
+    
     delay(50); // 20 Hz
   }
 
   // Stop motor
   setMotor(0);
-
+  
   // If runTime is close to timeout, then it probably timed out.
   // Print whether window finished moving to position or timed out.
   if (runTime > (TIMEOUT - 100)) {
@@ -301,14 +350,22 @@ int moveWindow(int setpoint) {
 int readPosition() {
   // get position in adc counts 0-1023
   pos_current = analogRead(POT_PIN);
-
+//  Serial.print("Analog Pot Reading: ");
+//  Serial.println(pos_current);
+  
   // If position is below min or above max, something is wrong
-  if ((pos_current < pot_min) || (pos_current > pot_max)) {
-//    Serial.println("Window out of range");
+//  if ((pos_current < pot_close) || (pos_current > pot_open)) {
+  if ((pos_current > pot_close) || (pos_current < pot_open)) {
+//    Serial.println("Window out of range");  
   }
+  
+//  pos_current -= pot_close;   // subtract minimum from position
+//  pos_current *= pot_scale; // convert from adc counts to percent
 
-  pos_current -= pot_min;   // subtract minimum from position
-  pos_current = 100 - pos_current*pot_scale; // convert from adc counts to percent
+  pos_current = pot_close - pos_current;
+  pos_current *= pot_scale;
+  Serial.print("Position Reading: ");
+  Serial.println(pos_current);
   return pos_current;
 }
 
