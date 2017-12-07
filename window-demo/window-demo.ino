@@ -201,35 +201,30 @@ void loop(void)
     /* Command is sent when \n (\r) or println is called */
     /* AT+GATTCHAR=CharacteristicID,value */
 
-  //  ble.sendCommandWithIntReply(F("AT+GATTCHAR=2"), &window_setpoint);
-  //  Serial.print("window_setpoint2: ");
-  //  Serial.println(window_setpoint);
+//  ble.sendCommandWithIntReply(F("AT+GATTCHAR=2"), &window_setpoint);
 
     // send position to Pico
     pos_current = readPosition();
     broadcastPosition();
 
+    // if something has been sent through serial:
     if (Serial.available() > 0) {
       // read the incoming byte:
       pos_setpoint = Serial.parseInt();
-       
-      //  Serial.print("pos_setpoint: ");
-      //  Serial.println(pos_setpoint);
-       ble.print( F("AT+GATTCHAR=") );
-       ble.print( setpointCharID );
-       ble.print(F(","));
-       ble.print(pos_setpoint, HEX);
-       ble.println( F("-00-00-00") );
+      
+      // move the window to setpoint
+      moveWindow(pos_setpoint);
+
+      ble.print( F("AT+GATTCHAR=") );
+      ble.print( setpointCharID );
+      ble.print( F(",") );
+      ble.print( pos_setpoint, HEX);
+      ble.println( F("-00-00-00") );
      }
      else{
        //readSetpoint();
      }
    }
-  // move the window to setpoint from bluetooth
-  moveWindow(pos_setpoint);
-
-  // move window to input integer
-  //moveWindow(Serial.parseInt());
 
   // window should be at setpoint now. Send position to Pico.
   if(BT_ENB) broadcastPosition();
@@ -242,7 +237,7 @@ void loop(void)
 //                          CUSTOM FUNCTIONS                                 //
 ///////////////////////////////////////////////////////////////////////////////
 
-/******************************************************************************
+/************************************************ ******************************
  * int moveWindow()
  *
  * Takes in a setpoint and moves window until error is below max error.
@@ -255,7 +250,7 @@ int moveWindow(int setpoint) {
 
   // Check if input is in range
   if ((setpoint < 0) || (setpoint > 100)) {
-    Serial.print("That position is not 1-100. ");
+    Serial.print("That position is not 0-100. ");
     Serial.println("Remaining at current position.");
     setpoint = pos_current;
   }
@@ -320,7 +315,7 @@ int readPosition() {
 //  pos_current -= pot_close;   // subtract minimum from position
 //  pos_current *= pot_scale;   // convert from adc counts to percent
 
-  pos_current = map(adcPosition, pot_close, pot_open, 1, 100);
+  pos_current = map(adcPosition, pot_close, pot_open, 0, 100);
   Serial.print("Position Reading: ");
   Serial.print(pos_current);
   Serial.println(" percent");
