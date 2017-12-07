@@ -24,7 +24,7 @@
 #endif
 
 // want bluetooth?
-#define BT_ENB false
+#define BT_ENB true
 
 // Pin Definitions
 #define PWM_PIN     5  // Enable pin on Motor Driver
@@ -44,7 +44,7 @@
 
 // Define potentiometer scale (can be between 0 and 1023)
 // This needs to be calibrated. Let's start with a small range in the middle.
-float pot_open  = 1015; // adc counts
+float pot_open  = 950; // adc counts
 float pot_close = 0;    // adc counts
 float pot_scale = 100.0/(pot_open - pot_close); // percent / adc counts
 
@@ -176,8 +176,17 @@ void setup(void)
     /* Reset the device for the new service setting changes to take effect */
     Serial.print(F("Performing a SW reset (service changes require a reset): "));
     ble.reset();
+    Serial.println(); 
 
-    Serial.println();
+
+    // set bluetooth setpoint to current position
+    ble.print( F("AT+GATTCHAR=") );
+    ble.print( setpointCharID );
+    ble.print(F(","));
+    ble.print(readPosition(), HEX);
+    ble.println( F("-00-00-00") );
+
+    moveWindow(readPosition());
 
     ////////////////////////// END ADAFRUIT BLUETOOTH CODE /////////////////////////
   }
@@ -185,8 +194,6 @@ void setup(void)
 
 
 /**************************************************************************/
-
-int incomingByte = 0;
 
 void loop(void)
 {
@@ -200,18 +207,12 @@ void loop(void)
 
     // send position to Pico
     pos_current = readPosition();
-    if(BT_ENB) broadcastPosition();
+    broadcastPosition();
 
     if (Serial.available() > 0) {
       // read the incoming byte:
-       incomingByte = Serial.parseInt();
-
-       // say what you got:
-      //  Serial.print("I received: ");
-      //  Serial.println(incomingByte);
-
-       pos_setpoint = incomingByte;
-
+      pos_setpoint = Serial.parseInt();
+       
       //  Serial.print("pos_setpoint: ");
       //  Serial.println(pos_setpoint);
        ble.print( F("AT+GATTCHAR=") );
@@ -221,14 +222,14 @@ void loop(void)
        ble.println( F("-00-00-00") );
      }
      else{
-       readSetpoint();
+       //readSetpoint();
      }
    }
-  // move the window to setpoint
-  // moveWindow(pos_setpoint);
+  // move the window to setpoint from bluetooth
+  moveWindow(pos_setpoint);
 
   // move window to input integer
-  moveWindow(Serial.parseInt());
+  //moveWindow(Serial.parseInt());
 
   // window should be at setpoint now. Send position to Pico.
   if(BT_ENB) broadcastPosition();
@@ -252,8 +253,8 @@ int moveWindow(int setpoint) {
   // Read current pot position
   pos_current = readPosition();
 
-  // Check if input is in range (ignore 0 since that's the default value of parseInt)
-  if ((setpoint <= 0) || (setpoint > 100)) {
+  // Check if input is in range
+  if ((setpoint < 0) || (setpoint > 100)) {
     Serial.print("That position is not 1-100. ");
     Serial.println("Remaining at current position.");
     setpoint = pos_current;
@@ -354,8 +355,11 @@ void readSetpoint() {
 //  ble.print( F("AT+GATTCHAR=") );
 //  ble.println( setpointCharID );
 
+  // reads setpoint from bluetooth in HEX
   ble.sendCommandWithIntReply(F("AT+GATTCHAR=2"), &pos_setpoint);
   ble.sendCommandWithIntReply(F("AT+GATTCHAR=2"), &pos_setpoint);
+
+  // convert from hex to decimal
   pos_setpoint = (pos_setpoint/10)*16 + pos_setpoint%10;
   Serial.print("pos_setpoint: ");
   Serial.println(pos_setpoint);
